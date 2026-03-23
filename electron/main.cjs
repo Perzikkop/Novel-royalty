@@ -212,6 +212,30 @@ function normalizeBookIdReferences() {
   }
 }
 
+function cleanupDatabase() {
+  run('BEGIN TRANSACTION');
+  try {
+    run('DELETE FROM royalty_entries WHERE entry_date IS NULL OR TRIM(entry_date) = ""');
+    run('DELETE FROM royalty_entries WHERE book_id NOT IN (SELECT id FROM books)');
+    run('DELETE FROM monthly_book_financials WHERE month_key IS NULL OR TRIM(month_key) = ""');
+    run('DELETE FROM monthly_book_financials WHERE book_id NOT IN (SELECT id FROM books)');
+    run('DELETE FROM monthly_financials WHERE month_key IS NULL OR TRIM(month_key) = ""');
+    run('DELETE FROM yearly_financials WHERE year_key IS NULL OR TRIM(year_key) = ""');
+
+    run('UPDATE royalty_entries SET amount = ROUND(COALESCE(amount, 0), 2)');
+    run('UPDATE monthly_book_financials SET actual_total = ROUND(COALESCE(actual_total, 0), 2), after_tax_total = ROUND(COALESCE(after_tax_total, 0), 2), tax = ROUND(COALESCE(actual_total, 0) - COALESCE(after_tax_total, 0), 2)');
+    run('UPDATE monthly_financials SET total_fee = ROUND(COALESCE(total_fee, 0), 2), actual_total = ROUND(COALESCE(actual_total, 0), 2), after_tax_total = ROUND(COALESCE(after_tax_total, 0), 2), tax = ROUND(COALESCE(actual_total, 0) - COALESCE(after_tax_total, 0), 2)');
+    run('UPDATE yearly_financials SET refund_amount = ROUND(COALESCE(refund_amount, 0), 2)');
+
+    run('DROP TABLE IF EXISTS monthly_summaries');
+    run('COMMIT');
+    saveDatabase();
+  } catch (error) {
+    run('ROLLBACK');
+    throw error;
+  }
+}
+
 function importWorkbook(filePath) {
   const workbook = XLSX.readFile(filePath);
   const monthSheets = workbook.SheetNames.filter((name) => /^\d+月$/.test(name));
@@ -815,9 +839,9 @@ async function pickExcelFile() {
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
-    height: 940,
+    height: 1000,
     minWidth: 1120,
-    minHeight: 760,
+    minHeight: 820,
     frame: false,
     titleBarStyle: 'hidden',
     title: '小说稿费记录器',
@@ -837,6 +861,7 @@ async function initialize() {
   db = loadDatabaseFromDisk();
   setupSchema();
   normalizeBookIdReferences();
+  cleanupDatabase();
   refreshWebDavAutoSyncTimer();
   const defaultImportPath = getDefaultImportPath();
   if (fs.existsSync(defaultImportPath) && !getMeta('last_import_at', '')) importWorkbook(defaultImportPath);

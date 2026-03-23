@@ -29,12 +29,14 @@
     "concurrently": "^9.2.1",
     "electron": "^41.0.3",
     "electron-builder": "^26.8.1",
+    "rcedit": "^5.0.2",
     "vite": "^8.0.1",
     "wait-on": "^9.0.4"
   },
   "build": {
     "appId": "com.codex.bookroyalty",
     "productName": "小说稿费记录器",
+    "afterPack": "scripts/afterPack.cjs",
     "directories": {
       "output": "dist-electron-105"
     },
@@ -61,7 +63,7 @@
       "node_modules/sql.js/dist/*.worker.js"
     ],
     "win": {
-      "icon": "electron/assets/app-icon.png",
+      "icon": "electron/assets/app-icon.ico",
       "signAndEditExecutable": false,
       "target": [
         {
@@ -76,8 +78,12 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "小说稿费记录器",
+      "installerIcon": "electron/assets/app-icon.ico",
+      "uninstallerIcon": "electron/assets/app-icon.ico",
+      "installerHeaderIcon": "electron/assets/app-icon.ico"
     }
   }
 }

@@ -114,13 +114,16 @@ const filteredYearRows = computed(() => state.yearSummary.filter((item) => {
   if (queryFilters.yearTo && item.yearKey > queryFilters.yearTo) return false;
   return true;
 }));
-const yearOptions = computed(() => state.yearSummary.map((item) => item.yearKey));
-const monthOptions = computed(() => state.monthSummary.map((item) => ({ value: item.monthKey, label: `${item.monthKey} · ${item.monthLabel}` })));
-const dayMonthOptions = computed(() => {
-  const monthSet = new Set(state.daySummary.map((item) => item.entryDate.slice(0, 7)));
-  if (queryFilters.dayMonth) monthSet.add(queryFilters.dayMonth);
-  return Array.from(monthSet).sort((a, b) => b.localeCompare(a)).map((value) => ({ value, label: value }));
-});
+const yearOptions = computed(() => [...new Set(state.yearSummary.map((item) => item.yearKey))].sort((a, b) => b.localeCompare(a)));
+const monthOptions = computed(() =>
+  [...new Map(state.monthSummary.map((item) => [item.monthKey, { value: item.monthKey, label: `${item.monthKey} · ${item.monthLabel}` }])).values()]
+    .sort((a, b) => b.value.localeCompare(a.value))
+);
+const dayMonthOptions = computed(() =>
+  [...new Set(state.daySummary.map((item) => item.entryDate.slice(0, 7)))]
+    .sort((a, b) => b.localeCompare(a))
+    .map((value) => ({ value, label: value }))
+);
 const recentDayRows = computed(() => {
   const selectedMonth = String(form.entryDate || '').slice(0, 7);
   const rows = selectedMonth
@@ -203,6 +206,34 @@ function patchFormAmounts(next) {
     form.amounts[key] = value;
   });
 }
+function ensureQueryFilters() {
+  const fallbackDayMonth = dayMonthOptions.value[0]?.value || dayjs().format('YYYY-MM');
+  if (!dayMonthOptions.value.some((item) => item.value === queryFilters.dayMonth)) {
+    queryFilters.dayMonth = fallbackDayMonth;
+  }
+
+  const fallbackMonth = monthOptions.value[0]?.value || dayjs().format('YYYY-MM');
+  if (!monthOptions.value.some((item) => item.value === queryFilters.monthFrom)) {
+    queryFilters.monthFrom = fallbackMonth;
+  }
+  if (!monthOptions.value.some((item) => item.value === queryFilters.monthTo)) {
+    queryFilters.monthTo = queryFilters.monthFrom;
+  }
+  if (queryFilters.monthFrom && queryFilters.monthTo && queryFilters.monthFrom > queryFilters.monthTo) {
+    queryFilters.monthTo = queryFilters.monthFrom;
+  }
+
+  const fallbackYear = yearOptions.value[0] || dayjs().format('YYYY');
+  if (!yearOptions.value.includes(queryFilters.yearFrom)) {
+    queryFilters.yearFrom = fallbackYear;
+  }
+  if (!yearOptions.value.includes(queryFilters.yearTo)) {
+    queryFilters.yearTo = queryFilters.yearFrom;
+  }
+  if (queryFilters.yearFrom && queryFilters.yearTo && queryFilters.yearFrom > queryFilters.yearTo) {
+    queryFilters.yearTo = queryFilters.yearFrom;
+  }
+}
 function ensureMaps() {
   const next = {};
   state.books.forEach((book) => {
@@ -260,11 +291,22 @@ function hydrateDashboard(data) {
     form.entryDate = latestDay;
   }
 
-  queryFilters.dayMonth = state.daySummary.some((item) => item.entryDate.startsWith(currentMonth)) ? currentMonth : latestDay.slice(0, 7);
-  queryFilters.monthFrom = state.monthSummary.some((item) => item.monthKey === currentMonth) ? currentMonth : latestMonth;
-  queryFilters.monthTo = queryFilters.monthFrom;
-  queryFilters.yearFrom = state.yearSummary.some((item) => item.yearKey === currentYear) ? currentYear : latestYear;
-  queryFilters.yearTo = queryFilters.yearFrom;
+  if (!queryFilters.dayMonth) {
+    queryFilters.dayMonth = state.daySummary.some((item) => item.entryDate.startsWith(currentMonth)) ? currentMonth : latestDay.slice(0, 7);
+  }
+  if (!queryFilters.monthFrom) {
+    queryFilters.monthFrom = state.monthSummary.some((item) => item.monthKey === currentMonth) ? currentMonth : latestMonth;
+  }
+  if (!queryFilters.monthTo) {
+    queryFilters.monthTo = queryFilters.monthFrom;
+  }
+  if (!queryFilters.yearFrom) {
+    queryFilters.yearFrom = state.yearSummary.some((item) => item.yearKey === currentYear) ? currentYear : latestYear;
+  }
+  if (!queryFilters.yearTo) {
+    queryFilters.yearTo = queryFilters.yearFrom;
+  }
+  ensureQueryFilters();
 
   if (!state.monthSummary.some((item) => item.monthKey.startsWith(`${entryYear.value}-`))) {
     entryYear.value = latestYear;
@@ -390,6 +432,14 @@ async function closeWindow() { await window.royaltyApi.closeWindow(); }
 watch(entryYear, (value) => {
   const currentMonthPart = String(entryMonthKey.value || '').slice(5, 7) || String(dayjs().month() + 1).padStart(2, '0');
   entryMonthKey.value = `${value}-${currentMonthPart}`;
+});
+
+watch(() => queryFilters.monthFrom, (value) => {
+  if (queryFilters.monthTo && value && queryFilters.monthTo < value) queryFilters.monthTo = value;
+});
+
+watch(() => queryFilters.yearFrom, (value) => {
+  if (queryFilters.yearTo && value && queryFilters.yearTo < value) queryFilters.yearTo = value;
 });
 
 watch(() => form.entryDate, async (value) => {
@@ -611,7 +661,8 @@ onMounted(loadDashboard);
               <div class="query-filters">
                 <label class="field compact-field">
                   <span>查询月份</span>
-                  <select v-model="queryFilters.dayMonth" class="query-input">
+                  <select v-model="queryFilters.dayMonth" class="query-input" :disabled="!dayMonthOptions.length">
+                    <option v-if="!dayMonthOptions.length" value="">暂无数据</option>
                     <option v-for="month in dayMonthOptions" :key="`day-month-${month.value}`" :value="month.value">{{ month.label }}</option>
                   </select>
                 </label>
@@ -643,15 +694,15 @@ onMounted(loadDashboard);
               <div class="query-filters">
                 <label class="field compact-field">
                   <span>开始月份</span>
-                  <select v-model="queryFilters.monthFrom" class="query-input">
-                    <option value="">全部</option>
+                  <select v-model="queryFilters.monthFrom" class="query-input" :disabled="!monthOptions.length">
+                    <option v-if="!monthOptions.length" value="">暂无数据</option>
                     <option v-for="month in monthOptions" :key="`from-month-${month.value}`" :value="month.value">{{ month.label }}</option>
                   </select>
                 </label>
                 <label class="field compact-field">
                   <span>结束月份</span>
-                  <select v-model="queryFilters.monthTo" class="query-input">
-                    <option value="">全部</option>
+                  <select v-model="queryFilters.monthTo" class="query-input" :disabled="!monthOptions.length">
+                    <option v-if="!monthOptions.length" value="">暂无数据</option>
                     <option v-for="month in monthOptions" :key="`to-month-${month.value}`" :value="month.value">{{ month.label }}</option>
                   </select>
                 </label>
@@ -720,15 +771,15 @@ onMounted(loadDashboard);
               <div class="query-filters">
                 <label class="field compact-field">
                   <span>开始年份</span>
-                  <select v-model="queryFilters.yearFrom" class="query-input">
-                    <option value="">全部</option>
+                  <select v-model="queryFilters.yearFrom" class="query-input" :disabled="!yearOptions.length">
+                    <option v-if="!yearOptions.length" value="">暂无数据</option>
                     <option v-for="year in yearOptions" :key="`from-${year}`" :value="year">{{ year }}</option>
                   </select>
                 </label>
                 <label class="field compact-field">
                   <span>结束年份</span>
-                  <select v-model="queryFilters.yearTo" class="query-input">
-                    <option value="">全部</option>
+                  <select v-model="queryFilters.yearTo" class="query-input" :disabled="!yearOptions.length">
+                    <option v-if="!yearOptions.length" value="">暂无数据</option>
                     <option v-for="year in yearOptions" :key="`to-${year}`" :value="year">{{ year }}</option>
                   </select>
                 </label>
