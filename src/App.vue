@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import dayjs from 'dayjs';
+import appIconUrl from './assets/app-icon.png';
 
 const mainTab = ref('entry');
 const entryTab = ref('day');
@@ -453,7 +454,7 @@ onMounted(loadDashboard);
   <div class="app-shell">
     <header class="window-bar">
       <div class="window-drag">
-        <div class="brand-mark">R</div>
+        <img class="brand-mark" :src="appIconUrl" alt="小说稿费记录器" />
         <div class="brand-text">小说稿费记录器</div>
       </div>
       <div class="window-actions no-drag">

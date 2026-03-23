@@ -56,11 +56,9 @@ button, input { font: inherit; }
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-weight: 700;
-  background: linear-gradient(135deg, #2563eb, #14b8a6);
+  display: block;
+  object-fit: contain;
+  flex: 0 0 24px;
 }
 
 .brand-text { font-size: 13px; color: var(--muted); }

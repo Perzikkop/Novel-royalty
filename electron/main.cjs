@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell } = require('electron');
 const XLSX = require('xlsx');
 const initSqlJs = require('sql.js');
 
@@ -8,9 +8,11 @@ const isDev = !app.isPackaged;
 let db;
 let SQL;
 let mainWindow;
+let tray = null;
 const WEB_DAV_FILE_NAME = 'royalty-data.sqlite';
 let webdavAutoSyncTimer = null;
 let webdavDirty = false;
+let isQuitting = false;
 
 function getAssetPath(name) {
   return path.join(__dirname, 'assets', name);
@@ -853,7 +855,42 @@ async function createWindow() {
       nodeIntegration: false,
     },
   });
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    mainWindow.hide();
+  });
   await mainWindow.loadURL(getRendererUrl());
+}
+
+function showMainWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function ensureTray() {
+  if (tray) return tray;
+  tray = new Tray(getAssetPath('app-icon.png'));
+  tray.setToolTip('小说稿费记录器');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开主窗口', click: () => showMainWindow() },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        isQuitting = true;
+        tray?.destroy();
+        tray = null;
+        mainWindow?.destroy();
+        app.quit();
+      },
+    },
+  ]));
+  tray.on('double-click', () => showMainWindow());
+  tray.on('click', () => showMainWindow());
+  return tray;
 }
 
 async function initialize() {
@@ -862,6 +899,7 @@ async function initialize() {
   setupSchema();
   normalizeBookIdReferences();
   cleanupDatabase();
+  ensureTray();
   refreshWebDavAutoSyncTimer();
   const defaultImportPath = getDefaultImportPath();
   if (fs.existsSync(defaultImportPath) && !getMeta('last_import_at', '')) importWorkbook(defaultImportPath);
@@ -871,10 +909,23 @@ app.whenReady().then(async () => {
   await initialize();
   await createWindow();
   app.on('activate', async () => {
-    if (BrowserWindow.getAllWindows().length === 0) await createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      await createWindow();
+    } else {
+      showMainWindow();
+    }
   });
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+app.on('window-all-closed', (event) => {
+  if (!isQuitting) {
+    event.preventDefault();
+  } else if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
 
 ipcMain.handle('dashboard:load', async () => getDashboardData());
 ipcMain.handle('entry:get-date', async (_event, entryDate) => getDateEntries(entryDate));
@@ -916,4 +967,4 @@ ipcMain.handle('webdav:push', async () => pushDatabaseToWebDav());
 ipcMain.handle('webdav:pull', async () => pullDatabaseFromWebDav());
 ipcMain.handle('path:open-db-folder', async () => { const folder = path.dirname(getDatabasePath()); await fs.promises.mkdir(folder, { recursive: true }); await shell.openPath(folder); return folder; });
 ipcMain.handle('window:minimize', async () => { mainWindow?.minimize(); });
-ipcMain.handle('window:close', async () => { mainWindow?.close(); });
+ipcMain.handle('window:close', async () => { mainWindow?.hide(); });
