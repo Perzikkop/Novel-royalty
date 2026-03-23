@@ -1,0 +1,83 @@
+{
+  "name": "book",
+  "version": "1.0.5",
+  "description": "Novel royalty recorder desktop app",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on tcp:5173 && electron .",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder --win nsis",
+    "dist:portable": "npm run build && electron-builder --win portable"
+  },
+  "keywords": [
+    "electron",
+    "vue",
+    "royalty"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dayjs": "^1.11.20",
+    "sql.js": "^1.14.1",
+    "vue": "^3.5.30",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.5",
+    "concurrently": "^9.2.1",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
+    "vite": "^8.0.1",
+    "wait-on": "^9.0.4"
+  },
+  "build": {
+    "appId": "com.codex.bookroyalty",
+    "productName": "小说稿费记录器",
+    "directories": {
+      "output": "dist-electron-105"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "!**/*.map",
+      "!**/*.md",
+      "!**/test{,s}/**/*",
+      "!**/__tests__/**/*",
+      "!**/example{,s}/**/*",
+      "!**/docs/**/*",
+      "!**/*.d.ts",
+      "!**/sql-asm-debug.js",
+      "!**/worker.sql-asm-debug.js"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sql.js/dist/*.wasm",
+      "node_modules/sql.js/dist/*.worker.js"
+    ],
+    "win": {
+      "icon": "electron/assets/app-icon.png",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
