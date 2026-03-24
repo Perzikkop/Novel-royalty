@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue';
 import dayjs from 'dayjs';
 import appIconUrl from './assets/app-icon.png';
 
@@ -348,9 +348,14 @@ async function withBusy(task, successText) {
   }
 }
 async function saveEntry() {
-  const data = await withBusy(() => window.royaltyApi.saveEntry({ entryDate: form.entryDate, amounts: form.amounts }), '已保存');
+  const entryDate = String(form.entryDate || '').trim();
+  if (!entryDate) {
+    throw new Error('请选择录入日期后再保存');
+  }
+  const amounts = JSON.parse(JSON.stringify(toRaw(form.amounts)));
+  const data = await withBusy(() => window.royaltyApi.saveEntry({ entryDate, amounts }), '已保存');
   hydrateDashboard(data);
-  await loadDateEntries(form.entryDate);
+  await loadDateEntries(entryDate);
 }
 async function addBook() {
   if (!newBookName.value.trim()) return;
@@ -491,6 +496,7 @@ onMounted(loadDashboard);
                   <button class="ghost small" @click="jumpDate(-1)">前一天</button>
                   <input v-model="form.entryDate" type="date" />
                   <button class="ghost small" @click="form.entryDate = DEFAULT_ENTRY_DATE">昨天</button>
+                  <button class="ghost small" @click="form.entryDate = dayjs().format('YYYY-MM-DD')">今天</button>
                   <button class="ghost small" @click="jumpDate(1)">后一天</button>
                 </div>
                 <div class="entry-total-card">{{ formatCurrency(entryTotal) }}</div>

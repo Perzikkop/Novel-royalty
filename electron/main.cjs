@@ -5,6 +5,21 @@ const XLSX = require('xlsx');
 const initSqlJs = require('sql.js');
 
 const isDev = !app.isPackaged;
+
+// 单实例锁，防止同时打开多个客户端
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
 let db;
 let SQL;
 let mainWindow;
@@ -755,7 +770,9 @@ function saveYearFinancials(payload) {
 }
 
 function upsertRoyaltyEntry(payload) {
-  const entryDate = String(payload?.entryDate || '');
+  const entryDate = String(payload?.entryDate || '').trim();
+  if (!entryDate) throw new Error('缺少日期，无法保存录入');
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(entryDate)) throw new Error('日期格式错误，请使用 YYYY-MM-DD');
   const amounts = payload?.amounts || {};
   const books = all('SELECT id FROM books ORDER BY id');
   run('BEGIN TRANSACTION');
