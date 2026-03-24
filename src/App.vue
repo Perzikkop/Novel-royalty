@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import dayjs from 'dayjs';
 import appIconUrl from './assets/app-icon.png';
 
+const DEFAULT_ENTRY_DATE = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
 const mainTab = ref('entry');
 const entryTab = ref('day');
 const queryTab = ref('day');
@@ -30,8 +31,6 @@ const queryFilters = reactive({
 const state = reactive({
   books: [],
   totals: { totalRoyalty: 0, activeDays: 0, entryCount: 0 },
-  today: dayjs().format('YYYY-MM-DD'),
-  todayBooks: [],
   daySummary: [],
   monthSummary: [],
   yearSummary: [],
@@ -44,7 +43,7 @@ const state = reactive({
   },
 });
 
-const form = reactive({ entryDate: dayjs().format('YYYY-MM-DD'), amounts: {} });
+const form = reactive({ entryDate: DEFAULT_ENTRY_DATE, amounts: {} });
 
 const activeBook = computed(() => state.books.find((book) => book.id === activeBookId.value) || null);
 const activeBookAmount = computed({
@@ -247,8 +246,6 @@ function ensureMaps() {
 function hydrateDashboard(data) {
   state.books = data.books || [];
   state.totals = data.totals || state.totals;
-  state.today = data.today || state.today;
-  state.todayBooks = data.todayBooks || [];
   state.daySummary = data.daySummary || [];
   state.monthSummary = data.monthSummary || [];
   state.yearSummary = data.yearSummary || [];
@@ -281,7 +278,7 @@ function hydrateDashboard(data) {
       if (!monthlyDrafts[month.monthKey][book.id]) monthlyDrafts[month.monthKey][book.id] = { actualTotal: '', afterTaxTotal: '' };
     });
   });
-  const currentDay = dayjs().format('YYYY-MM-DD');
+  const currentDay = DEFAULT_ENTRY_DATE;
   const currentMonth = dayjs().format('YYYY-MM');
   const currentYear = dayjs().format('YYYY');
   const latestDay = state.daySummary[0]?.entryDate || currentDay;
@@ -492,7 +489,7 @@ onMounted(loadDashboard);
                 <div class="entry-date-block">
                   <button class="ghost small" @click="jumpDate(-1)">前一天</button>
                   <input v-model="form.entryDate" type="date" />
-                  <button class="ghost small" @click="form.entryDate = state.today">今天</button>
+                  <button class="ghost small" @click="form.entryDate = DEFAULT_ENTRY_DATE">昨天</button>
                   <button class="ghost small" @click="jumpDate(1)">后一天</button>
                 </div>
                 <div class="entry-total-card">{{ formatCurrency(entryTotal) }}</div>

@@ -528,13 +528,6 @@ function getYearlySummary() {
     .sort((a, b) => b.yearKey.localeCompare(a.yearKey));
 }
 
-function getTodayBookSnapshot(entryDate) {
-  return all(`${effectiveEntriesSql()}
-    SELECT b.id, b.name, e.amount AS amount
-    FROM books b LEFT JOIN effective_entries e ON e.book_id = b.id AND e.entry_date = ?
-    ORDER BY b.id`, [entryDate]).map((row) => ({ id: row.id, name: row.name, amount: row.amount === null ? '' : String(row.amount || '') }));
-}
-
 function getWebDavConfig() {
   const directory = getMeta('webdav_directory', getMeta('webdav_url', ''));
   const normalizedDirectory = String(directory || '').trim().replace(/\/+$/, '');
@@ -623,7 +616,6 @@ function refreshWebDavAutoSyncTimer() {
 }
 
 function getDashboardData() {
-  const today = new Date().toISOString().slice(0, 10);
   const books = all('SELECT id, name FROM books ORDER BY id');
   const daySummary = getDailySummary();
   const monthSummary = getMonthlySummary();
@@ -633,8 +625,6 @@ function getDashboardData() {
   return {
     books,
     totals,
-    today,
-    todayBooks: getTodayBookSnapshot(today),
     daySummary,
     monthSummary,
     yearSummary,
