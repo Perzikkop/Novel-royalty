@@ -2,6 +2,9 @@
 import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue';
 import dayjs from 'dayjs';
 import appIconUrl from './assets/app-icon.png';
+import EntryView from './components/EntryView.vue';
+import QueryView from './components/QueryView.vue';
+import SettingsView from './components/SettingsView.vue';
 
 const DEFAULT_ENTRY_DATE = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
 const mainTab = ref('entry');
@@ -9,6 +12,7 @@ const entryTab = ref('day');
 const queryTab = ref('day');
 const entryYear = ref(dayjs().format('YYYY'));
 const entryMonthKey = ref(dayjs().format('YYYY-MM'));
+const pageShellRef = ref(null);
 const loading = ref(true);
 const busy = ref(false);
 const errorMessage = ref('');
@@ -426,7 +430,7 @@ async function editDay(entryDate) {
   entryTab.value = 'day';
   form.entryDate = entryDate;
   await nextTick();
-  document.querySelector('.page-shell')?.scrollTo({ top: 0, behavior: 'smooth' });
+  pageShellRef.value?.scrollTo({ top: 0, behavior: 'smooth' });
 }
 async function openDbFolder() { await window.royaltyApi.openDbFolder(); }
 async function minimizeWindow() { await window.royaltyApi.minimizeWindow(); }
@@ -465,7 +469,7 @@ onMounted(loadDashboard);
       </div>
     </header>
 
-    <div class="page-shell">
+    <div ref="pageShellRef" class="page-shell">
       <header class="topbar">
         <div>
           <h1>小说稿费记录器</h1>
@@ -483,450 +487,72 @@ onMounted(loadDashboard);
         <section v-if="loading" class="panel loading-panel">正在加载...</section>
 
         <template v-else>
-        <section v-if="mainTab === 'entry'" class="entry-layout compact-layout">
-          <div class="entry-main-stack">
-            <nav class="sub-tabs">
-              <button :class="['sub-tab', { active: entryTab === 'day' }]" @click="entryTab = 'day'">每日稿费录入</button>
-              <button :class="['sub-tab', { active: entryTab === 'month' }]" @click="entryTab = 'month'">每月稿费录入</button>
-            </nav>
+          <EntryView
+            v-if="mainTab === 'entry'"
+            v-model:entry-tab="entryTab"
+            v-model:entry-year="entryYear"
+            v-model:entry-month-key="entryMonthKey"
+            v-model:active-book-id="activeBookId"
+            :state="state"
+            :form="form"
+            :active-book="activeBook"
+            :entry-total="entryTotal"
+            :busy="busy"
+            :month-years="monthYears"
+            :visible-entry-months="visibleEntryMonths"
+            :current-entry-month="currentEntryMonth"
+            :current-month-totals="currentMonthTotals"
+            :current-month-books="currentMonthBooks"
+            :selected-entry-year-months="selectedEntryYearMonths"
+            :yearly-drafts="yearlyDrafts"
+            :monthly-drafts="monthlyDrafts"
+            :recent-day-rows="recentDayRows"
+            :default-entry-date="DEFAULT_ENTRY_DATE"
+            :format-currency="formatCurrency"
+            :jump-date="jumpDate"
+            :save-entry="saveEntry"
+            :save-month="saveMonth"
+            :save-year="saveYear"
+          />
 
-            <article v-if="entryTab === 'day'" class="panel entry-panel">
-              <div class="entry-header">
-                <div class="entry-date-block">
-                  <button class="ghost small" @click="jumpDate(-1)">前一天</button>
-                  <input v-model="form.entryDate" type="date" />
-                  <button class="ghost small" @click="form.entryDate = DEFAULT_ENTRY_DATE">昨天</button>
-                  <button class="ghost small" @click="form.entryDate = dayjs().format('YYYY-MM-DD')">今天</button>
-                  <button class="ghost small" @click="jumpDate(1)">后一天</button>
-                </div>
-                <div class="entry-total-card">{{ formatCurrency(entryTotal) }}</div>
-              </div>
+          <QueryView
+            v-else-if="mainTab === 'query'"
+            v-model:query-tab="queryTab"
+            :query-filters="queryFilters"
+            :day-month-options="dayMonthOptions"
+            :month-options="monthOptions"
+            :year-options="yearOptions"
+            :filtered-day-rows="filteredDayRows"
+            :filtered-month-rows="filteredMonthRows"
+            :filtered-year-rows="filteredYearRows"
+            :day-total="dayTotal"
+            :month-range-totals="monthRangeTotals"
+            :year-range-totals="yearRangeTotals"
+            :format-currency="formatCurrency"
+            :edit-day="editDay"
+          />
 
-              <div class="book-tabs">
-                <button
-                  v-for="book in state.books"
-                  :key="book.id"
-                  :class="['book-tab', { active: activeBookId === book.id }]"
-                  @click="activeBookId = book.id"
-                >
-                  {{ book.name }}
-                </button>
-              </div>
-
-              <div v-if="activeBook" class="focus-row">
-                <div class="focus-book">{{ activeBook.name }}</div>
-                <input v-model="activeBookAmount" class="focus-money" type="number" min="0" step="0.01" placeholder="0.00" />
-                <button class="primary save-main" :disabled="busy" @click="saveEntry">保存</button>
-              </div>
-
-              <div class="mini-grid">
-                <label v-for="book in state.books" :key="book.id" class="mini-card">
-                  <span>{{ book.name }}</span>
-                  <input v-model="form.amounts[book.id]" type="number" min="0" step="0.01" placeholder="0.00" />
-                </label>
-              </div>
-            </article>
-
-            <article v-else class="month-list">
-              <div class="panel month-toolbar">
-                <div class="month-year-tabs">
-                  <button
-                    v-for="year in monthYears"
-                    :key="year"
-                    :class="['year-chip', { active: entryYear === year }]"
-                    @click="entryYear = year"
-                  >
-                    {{ year }}
-                  </button>
-                </div>
-                <div class="month-chip-row">
-                  <button
-                    v-for="month in visibleEntryMonths"
-                    :key="month.monthKey"
-                    :class="['month-chip', { active: entryMonthKey === month.monthKey }]"
-                    @click="entryMonthKey = month.monthKey"
-                  >
-                    {{ month.monthLabel }}
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="currentEntryMonth" class="panel month-panel current-month-panel">
-                <div class="month-top">
-                  <div>
-                    <h2>{{ currentEntryMonth.monthLabel }}</h2>
-                    <div class="month-key">{{ currentEntryMonth.monthKey }}</div>
-                  </div>
-                  <div class="month-fee">{{ formatCurrency(currentMonthTotals.totalFee) }}</div>
-                </div>
-                <div class="month-summary-strip">
-                  <div class="summary-chip">
-                    <span>税前合计</span>
-                    <strong>{{ formatCurrency(currentMonthTotals.totalFee) }}</strong>
-                  </div>
-                  <div class="summary-chip">
-                    <span>实际合计</span>
-                    <strong>{{ formatCurrency(currentMonthTotals.actualTotal) }}</strong>
-                  </div>
-                  <div class="summary-chip">
-                    <span>税后合计</span>
-                    <strong>{{ formatCurrency(currentMonthTotals.afterTaxTotal) }}</strong>
-                  </div>
-                  <div class="summary-chip">
-                    <span>税额合计</span>
-                    <strong>{{ formatCurrency(currentMonthTotals.tax) }}</strong>
-                  </div>
-                </div>
-                <div class="month-book-table">
-                  <div class="month-book-head month-book-row">
-                    <span>书籍</span>
-                    <span>税前稿费</span>
-                    <span>实际稿费</span>
-                    <span>税后稿费</span>
-                    <span>税额</span>
-                  </div>
-                  <div v-for="book in currentMonthBooks" :key="`${currentEntryMonth.monthKey}-${book.bookId}`" class="month-book-row">
-                    <strong>{{ book.bookName }}</strong>
-                    <span>{{ formatCurrency(book.totalFee) }}</span>
-                    <input v-model="monthlyDrafts[currentEntryMonth.monthKey][book.bookId].actualTotal" type="number" min="0" step="0.01" placeholder="0.00" />
-                    <input v-model="monthlyDrafts[currentEntryMonth.monthKey][book.bookId].afterTaxTotal" type="number" min="0" step="0.01" placeholder="0.00" />
-                    <span class="tax-inline">{{ formatCurrency(book.tax) }}</span>
-                  </div>
-                  <div class="month-book-row total-row">
-                    <strong>合计</strong>
-                    <strong>{{ formatCurrency(currentMonthTotals.totalFee) }}</strong>
-                    <strong>{{ formatCurrency(currentMonthTotals.actualTotal) }}</strong>
-                    <strong>{{ formatCurrency(currentMonthTotals.afterTaxTotal) }}</strong>
-                    <strong>{{ formatCurrency(currentMonthTotals.tax) }}</strong>
-                  </div>
-                </div>
-                <div class="month-action-row">
-                  <button class="primary save-month-btn" :disabled="busy" @click="saveMonth(currentEntryMonth.monthKey)">保存本月</button>
-                </div>
-              </div>
-
-              <div class="panel year-refund-panel">
-                <div class="month-top">
-                  <div>
-                    <h2>{{ entryYear }}年退税</h2>
-                    <div class="month-key">年度实际总收入 = 税后总收入 + 退税金额</div>
-                  </div>
-                  <div class="month-fee">{{ formatCurrency(state.yearSummary.find((item) => item.yearKey === entryYear)?.actualIncome || 0) }}</div>
-                </div>
-                <div class="year-refund-row">
-                  <label class="field">
-                    <span>退税金额</span>
-                    <input v-model="yearlyDrafts[entryYear]" type="number" min="0" step="0.01" placeholder="0.00" />
-                  </label>
-                  <div class="summary-chip compact-chip">
-                    <span>税后总收入</span>
-                    <strong>{{ formatCurrency(state.yearSummary.find((item) => item.yearKey === entryYear)?.afterTaxTotal || 0) }}</strong>
-                  </div>
-                  <div class="summary-chip compact-chip">
-                    <span>年度实际总收入</span>
-                    <strong>{{ formatCurrency((Number(state.yearSummary.find((item) => item.yearKey === entryYear)?.afterTaxTotal || 0) + Number(yearlyDrafts[entryYear] || 0)).toFixed(2)) }}</strong>
-                  </div>
-                  <button class="primary save-month-btn" :disabled="busy" @click="saveYear(entryYear)">保存年度</button>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <aside class="panel side-panel">
-            <template v-if="entryTab === 'day'">
-              <h2>最近日期</h2>
-              <div class="quick-list">
-                <button v-for="day in recentDayRows" :key="day.entryDate" class="quick-item" @click="form.entryDate = day.entryDate">
-                  <span>{{ day.entryDate }}</span>
-                  <strong>{{ formatCurrency(day.total) }}</strong>
-                </button>
-              </div>
-            </template>
-            <template v-else>
-              <h2>月份概览</h2>
-              <div class="quick-list">
-                <div v-for="month in selectedEntryYearMonths.slice(0, 12)" :key="month.monthKey" class="quick-item static-item">
-                  <span>{{ month.monthLabel }}</span>
-                  <strong>{{ formatCurrency(month.totalFee) }}</strong>
-                </div>
-              </div>
-            </template>
-          </aside>
-        </section>
-
-        <section v-else-if="mainTab === 'query'" class="query-layout">
-          <nav class="sub-tabs">
-            <button :class="['sub-tab', { active: queryTab === 'day' }]" @click="queryTab = 'day'">按天</button>
-            <button :class="['sub-tab', { active: queryTab === 'month' }]" @click="queryTab = 'month'">按月</button>
-            <button :class="['sub-tab', { active: queryTab === 'year' }]" @click="queryTab = 'year'">按年</button>
-          </nav>
-
-          <article v-if="queryTab === 'day'" class="panel table-panel">
-            <div class="query-toolbar">
-              <div class="query-filters">
-                <label class="field compact-field">
-                  <span>查询月份</span>
-                  <select v-model="queryFilters.dayMonth" class="query-input" :disabled="!dayMonthOptions.length">
-                    <option v-if="!dayMonthOptions.length" value="">暂无数据</option>
-                    <option v-for="month in dayMonthOptions" :key="`day-month-${month.value}`" :value="month.value">{{ month.label }}</option>
-                  </select>
-                </label>
-              </div>
-              <div class="query-total">合计 {{ formatCurrency(dayTotal) }}</div>
-            </div>
-            <div class="table-scroll">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>金额</th>
-                    <th>书数</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="day in filteredDayRows" :key="day.entryDate">
-                    <td>{{ day.entryDate }}</td>
-                    <td>{{ formatCurrency(day.total) }}</td>
-                    <td>{{ day.bookCount }}</td>
-                    <td><button class="ghost small" @click="editDay(day.entryDate)">编辑</button></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <article v-else-if="queryTab === 'month'" class="panel table-panel">
-            <div class="query-toolbar">
-              <div class="query-filters">
-                <label class="field compact-field">
-                  <span>开始月份</span>
-                  <select v-model="queryFilters.monthFrom" class="query-input" :disabled="!monthOptions.length">
-                    <option v-if="!monthOptions.length" value="">暂无数据</option>
-                    <option v-for="month in monthOptions" :key="`from-month-${month.value}`" :value="month.value">{{ month.label }}</option>
-                  </select>
-                </label>
-                <label class="field compact-field">
-                  <span>结束月份</span>
-                  <select v-model="queryFilters.monthTo" class="query-input" :disabled="!monthOptions.length">
-                    <option v-if="!monthOptions.length" value="">暂无数据</option>
-                    <option v-for="month in monthOptions" :key="`to-month-${month.value}`" :value="month.value">{{ month.label }}</option>
-                  </select>
-                </label>
-              </div>
-              <div class="query-total query-total-grid">
-                <span>税前 {{ formatCurrency(monthRangeTotals.totalFee) }}</span>
-                <span>实际 {{ formatCurrency(monthRangeTotals.actualTotal) }}</span>
-                <span>税后 {{ formatCurrency(monthRangeTotals.afterTaxTotal) }}</span>
-                <span>税额 {{ formatCurrency(monthRangeTotals.tax) }}</span>
-              </div>
-            </div>
-            <div class="table-scroll">
-              <div class="grouped-summary-list">
-              <section v-for="month in filteredMonthRows" :key="month.monthKey" class="group-card">
-                <div class="group-card-header">
-                  <div>
-                    <h3>{{ month.monthLabel }}</h3>
-                    <div class="month-key">{{ month.monthKey }}</div>
-                  </div>
-                  <div class="group-totals">
-                    <span>税前 {{ formatCurrency(month.totalFee) }}</span>
-                    <span>实际 {{ formatCurrency(month.actualTotal) }}</span>
-                    <span>税后 {{ formatCurrency(month.afterTaxTotal) }}</span>
-                    <span>税额 {{ formatCurrency(month.tax) }}</span>
-                  </div>
-                </div>
-                <table class="data-table nested-table">
-                  <thead>
-                    <tr>
-                      <th>书籍</th>
-                      <th>税前</th>
-                      <th>实际</th>
-                      <th>税后</th>
-                      <th>税额</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="book in month.books" :key="`${month.monthKey}-${book.bookId}`">
-                      <td>{{ book.bookName }}</td>
-                      <td>{{ formatCurrency(book.totalFee) }}</td>
-                      <td>{{ formatCurrency(book.actualTotal) }}</td>
-                      <td>{{ formatCurrency(book.afterTaxTotal) }}</td>
-                      <td>{{ formatCurrency(book.tax) }}</td>
-                    </tr>
-                    <tr v-if="!month.books.some((book) => book.actualTotal || book.afterTaxTotal || book.tax) && (month.actualTotal || month.afterTaxTotal || month.tax)">
-                      <td>导入汇总</td>
-                      <td>{{ formatCurrency(month.totalFee) }}</td>
-                      <td>{{ formatCurrency(month.actualTotal) }}</td>
-                      <td>{{ formatCurrency(month.afterTaxTotal) }}</td>
-                      <td>{{ formatCurrency(month.tax) }}</td>
-                    </tr>
-                    <tr class="total-row">
-                      <td>合计</td>
-                      <td>{{ formatCurrency(month.totalFee) }}</td>
-                      <td>{{ formatCurrency(month.actualTotal) }}</td>
-                      <td>{{ formatCurrency(month.afterTaxTotal) }}</td>
-                      <td>{{ formatCurrency(month.tax) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </section>
-              </div>
-            </div>
-          </article>
-
-          <article v-else class="panel table-panel">
-            <div class="query-toolbar">
-              <div class="query-filters">
-                <label class="field compact-field">
-                  <span>开始年份</span>
-                  <select v-model="queryFilters.yearFrom" class="query-input" :disabled="!yearOptions.length">
-                    <option v-if="!yearOptions.length" value="">暂无数据</option>
-                    <option v-for="year in yearOptions" :key="`from-${year}`" :value="year">{{ year }}</option>
-                  </select>
-                </label>
-                <label class="field compact-field">
-                  <span>结束年份</span>
-                  <select v-model="queryFilters.yearTo" class="query-input" :disabled="!yearOptions.length">
-                    <option v-if="!yearOptions.length" value="">暂无数据</option>
-                    <option v-for="year in yearOptions" :key="`to-${year}`" :value="year">{{ year }}</option>
-                  </select>
-                </label>
-              </div>
-              <div class="query-total query-total-grid">
-                <span>税前 {{ formatCurrency(yearRangeTotals.totalFee) }}</span>
-                <span>实际 {{ formatCurrency(yearRangeTotals.actualTotal) }}</span>
-                <span>税后 {{ formatCurrency(yearRangeTotals.afterTaxTotal) }}</span>
-                <span>税额 {{ formatCurrency(yearRangeTotals.tax) }}</span>
-                <span>退税 {{ formatCurrency(yearRangeTotals.refundAmount) }}</span>
-                <span>实际总收入 {{ formatCurrency(yearRangeTotals.actualIncome) }}</span>
-              </div>
-            </div>
-            <div class="table-scroll">
-              <div class="grouped-summary-list">
-              <section v-for="year in filteredYearRows" :key="year.yearKey" class="group-card">
-                <div class="group-card-header">
-                  <div>
-                    <h3>{{ year.yearKey }}年</h3>
-                  </div>
-                  <div class="group-totals">
-                    <span>税前 {{ formatCurrency(year.totalFee) }}</span>
-                    <span>实际 {{ formatCurrency(year.actualTotal) }}</span>
-                    <span>税后 {{ formatCurrency(year.afterTaxTotal) }}</span>
-                    <span>税额 {{ formatCurrency(year.tax) }}</span>
-                    <span>退税 {{ formatCurrency(year.refundAmount) }}</span>
-                    <span>实际总收入 {{ formatCurrency(year.actualIncome) }}</span>
-                  </div>
-                </div>
-                <table class="data-table nested-table">
-                  <thead>
-                    <tr>
-                      <th>书籍</th>
-                      <th>税前</th>
-                      <th>实际</th>
-                      <th>税后</th>
-                      <th>税额</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="book in year.books" :key="`${year.yearKey}-${book.bookId}`">
-                      <td>{{ book.bookName }}</td>
-                      <td>{{ formatCurrency(book.totalFee) }}</td>
-                      <td>{{ formatCurrency(book.actualTotal) }}</td>
-                      <td>{{ formatCurrency(book.afterTaxTotal) }}</td>
-                      <td>{{ formatCurrency(book.tax) }}</td>
-                    </tr>
-                    <tr v-if="!year.books.some((book) => book.actualTotal || book.afterTaxTotal || book.tax) && (year.actualTotal || year.afterTaxTotal || year.tax)">
-                      <td>导入汇总</td>
-                      <td>{{ formatCurrency(year.totalFee) }}</td>
-                      <td>{{ formatCurrency(year.actualTotal) }}</td>
-                      <td>{{ formatCurrency(year.afterTaxTotal) }}</td>
-                      <td>{{ formatCurrency(year.tax) }}</td>
-                    </tr>
-                    <tr class="total-row">
-                      <td>合计</td>
-                      <td>{{ formatCurrency(year.totalFee) }}</td>
-                      <td>{{ formatCurrency(year.actualTotal) }}</td>
-                      <td>{{ formatCurrency(year.afterTaxTotal) }}</td>
-                      <td>{{ formatCurrency(year.tax) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </section>
-              </div>
-            </div>
-          </article>
-        </section>
-
-        <section v-else class="settings-layout">
-          <article class="panel settings-card">
-            <h2>书籍管理</h2>
-            <div class="inline-form top-gap inline-form-compact">
-              <input v-model="newBookName" type="text" placeholder="新增书籍名称" @keydown.enter="addBook" />
-              <button class="primary" :disabled="busy" @click="addBook">新增</button>
-            </div>
-            <div class="settings-book-list">
-              <div v-for="book in state.books" :key="book.id" class="settings-book-item">
-                <input v-model="bookDrafts[book.id]" type="text" />
-                <button class="ghost small" :disabled="busy" @click="renameBook(book)">保存</button>
-                <button class="danger small" :disabled="busy" @click="removeBook(book)">删除</button>
-              </div>
-            </div>
-          </article>
-
-          <article class="panel settings-card">
-            <h2>数据</h2>
-            <label class="field top-gap">
-              <span>Excel 路径</span>
-              <input v-model="importPath" type="text" />
-            </label>
-            <div class="button-row wrap-row top-gap">
-              <button class="ghost" :disabled="busy" @click="pickExcelFile">选择文件</button>
-              <button class="primary" :disabled="busy" @click="importExcel">导入 Excel</button>
-              <button class="ghost" :disabled="busy" @click="exportDatabase">导出备份</button>
-              <button class="ghost" @click="openDbFolder">打开目录</button>
-            </div>
-          </article>
-
-          <article class="panel settings-card wide-settings">
-            <h2>WebDAV</h2>
-            <div class="settings-grid top-gap">
-              <label class="field full-span">
-                <span>目录</span>
-                <input v-model="webdavForm.directory" type="text" placeholder="https://example.com/webdav/book-royalty" />
-              </label>
-              <label class="field">
-                <span>用户名</span>
-                <input v-model="webdavForm.username" type="text" />
-              </label>
-              <label class="field">
-                <span>密码</span>
-                <input v-model="webdavForm.password" type="password" />
-              </label>
-              <label class="field">
-                <span>自动同步间隔（分钟）</span>
-                <input v-model="webdavForm.autoSyncMinutes" type="number" min="1" step="1" />
-              </label>
-            </div>
-            <label class="toggle-row">
-              <input v-model="webdavForm.enabled" type="checkbox" />
-              <span>自动同步</span>
-            </label>
-            <div class="button-row wrap-row top-gap">
-              <button class="ghost" :disabled="busy" @click="saveWebDavConfig">保存配置</button>
-              <button class="ghost" :disabled="busy" @click="testWebDav">测试</button>
-              <button class="primary" :disabled="busy" @click="pushWebDav">上传</button>
-              <button class="ghost" :disabled="busy" @click="pullWebDav">下载</button>
-            </div>
-            <div class="sync-status top-gap">
-              <div>数据库文件：{{ state.meta.webdav.fileName || 'royalty-data.sqlite' }}</div>
-              <div>远程文件：{{ state.meta.webdav.fileUrl || '未生成' }}</div>
-              <div>最近同步：{{ formatBeijingTime(state.meta.webdav.lastSyncAt) }}</div>
-              <div>状态：{{ state.meta.webdav.lastSyncStatus || '未同步' }}</div>
-              <div>{{ state.meta.webdav.lastSyncMessage || '' }}</div>
-            </div>
-          </article>
-        </section>
+          <SettingsView
+            v-else
+            v-model:import-path="importPath"
+            v-model:new-book-name="newBookName"
+            :state="state"
+            :webdav-form="webdavForm"
+            :book-drafts="bookDrafts"
+            :busy="busy"
+            :format-beijing-time="formatBeijingTime"
+            :add-book="addBook"
+            :rename-book="renameBook"
+            :remove-book="removeBook"
+            :pick-excel-file="pickExcelFile"
+            :import-excel="importExcel"
+            :export-database="exportDatabase"
+            :open-db-folder="openDbFolder"
+            :save-web-dav-config="saveWebDavConfig"
+            :test-web-dav="testWebDav"
+            :push-web-dav="pushWebDav"
+            :pull-web-dav="pullWebDav"
+          />
         </template>
       </div>
     </div>

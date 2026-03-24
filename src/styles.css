@@ -8,7 +8,7 @@
   --brand: #2563eb;
   --brand-deep: #1d4ed8;
   --danger: #dc2626;
-  --shadow: 0 20px 50px rgba(52, 78, 131, 0.12);
+  --shadow: 0 16px 32px rgba(52, 78, 131, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -138,7 +138,8 @@ button, input { font: inherit; }
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow: hidden;
+  overflow: visible;
+  padding: 8px 10px;
 }
 
 h1, h2, p { margin: 0; }

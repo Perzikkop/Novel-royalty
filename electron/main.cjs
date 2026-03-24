@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, safeStorage, shell } = require('electron');
 const XLSX = require('xlsx');
 const initSqlJs = require('sql.js');
 
@@ -25,6 +25,7 @@ let SQL;
 let mainWindow;
 let tray = null;
 const WEB_DAV_FILE_NAME = 'royalty-data.sqlite';
+const MIGRATION_VERSION = 2;
 let webdavAutoSyncTimer = null;
 let webdavDirty = false;
 let isQuitting = false;
@@ -55,7 +56,7 @@ function getDatabasePath() {
 }
 
 function getDefaultImportPath() {
-  return String.raw`D:\Documents\我的文件\个人\其他资料\稿费\2025年.xlsx`;
+  return '';
 }
 
 function hasExistingData() {
@@ -125,6 +126,35 @@ function setMeta(key, value) {
 }
 function getMeta(key, fallback = '') {
   return get('SELECT meta_value FROM app_meta WHERE meta_key = ?', [key])?.meta_value ?? fallback;
+}
+
+function setSecretMeta(key, value) {
+  const plainText = String(value ?? '');
+  if (!plainText) {
+    setMeta(key, '');
+    return;
+  }
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(plainText).toString('base64');
+    setMeta(key, `enc:${encrypted}`);
+    return;
+  }
+  setMeta(key, `plain:${plainText}`);
+}
+
+function getSecretMeta(key, fallback = '') {
+  const rawValue = getMeta(key, '');
+  if (!rawValue) return fallback;
+  if (rawValue.startsWith('enc:')) {
+    try {
+      const decrypted = safeStorage.decryptString(Buffer.from(rawValue.slice(4), 'base64'));
+      return decrypted || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  if (rawValue.startsWith('plain:')) return rawValue.slice(6) || fallback;
+  return rawValue;
 }
 
 function setupSchema() {
@@ -246,11 +276,25 @@ function cleanupDatabase() {
 
     run('DROP TABLE IF EXISTS monthly_summaries');
     run('COMMIT');
-    saveDatabase();
   } catch (error) {
     run('ROLLBACK');
     throw error;
   }
+}
+
+function migrateSensitiveMeta() {
+  const password = getMeta('webdav_password', '');
+  if (!password || password.startsWith('enc:') || password.startsWith('plain:')) return;
+  setSecretMeta('webdav_password', password);
+}
+
+function runMigrations() {
+  const currentVersion = Number(getMeta('migration_version', '0') || 0);
+  if (currentVersion >= MIGRATION_VERSION) return;
+  cleanupDatabase();
+  migrateSensitiveMeta();
+  setMeta('migration_version', String(MIGRATION_VERSION));
+  saveDatabase();
 }
 
 function importWorkbook(filePath) {
@@ -278,11 +322,6 @@ function importWorkbook(filePath) {
         const entryDate = excelDateToIso(row[dateColumn]);
         monthKey = entryDate.slice(0, 7);
       });
-      if (monthKey) {
-        run("DELETE FROM royalty_entries WHERE source = 'import' AND entry_date LIKE ?", [`${monthKey}%`]);
-        run('DELETE FROM monthly_financials WHERE month_key = ?', [monthKey]);
-        run('DELETE FROM monthly_book_financials WHERE month_key = ?', [monthKey]);
-      }
       dateRows.forEach((row) => {
         const entryDate = excelDateToIso(row[dateColumn]);
         monthKey = entryDate.slice(0, 7);
@@ -350,10 +389,10 @@ function effectiveEntriesSql() {
   )`;
 }
 
-function getDailySummary(limit = 180) {
+function getDailySummary() {
   return all(`${effectiveEntriesSql()}
     SELECT entry_date AS entryDate, ROUND(SUM(amount), 2) AS total, COUNT(*) AS bookCount
-    FROM effective_entries GROUP BY entry_date ORDER BY entry_date DESC LIMIT ?`, [limit]);
+    FROM effective_entries GROUP BY entry_date ORDER BY entry_date DESC`);
 }
 
 function getMonthlySummary() {
@@ -552,7 +591,7 @@ function getWebDavConfig() {
     fileName: WEB_DAV_FILE_NAME,
     fileUrl: normalizedDirectory ? `${normalizedDirectory}/${WEB_DAV_FILE_NAME}` : '',
     username: getMeta('webdav_username', ''),
-    password: getMeta('webdav_password', ''),
+    password: getSecretMeta('webdav_password', ''),
     enabled: getMeta('webdav_enabled', 'false') === 'true',
     autoSyncMinutes,
     lastSyncAt: getMeta('webdav_last_sync_at', ''),
@@ -699,11 +738,10 @@ function saveMonthFinancials(payload) {
   const monthKey = String(payload?.monthKey || '');
   if (!monthKey) throw new Error('缺少月份');
   const books = Array.isArray(payload?.books) ? payload.books : [];
-  const totalFee = Number(
-    get('SELECT total_fee FROM monthly_financials WHERE month_key = ?', [monthKey])?.total_fee
-      || getMonthlySummary().find((m) => m.monthKey === monthKey)?.totalFee
-      || 0
-  );
+  const totalFee = Number((get(`${effectiveEntriesSql()}
+    SELECT ROUND(COALESCE(SUM(amount), 0), 2) AS totalFee
+    FROM effective_entries
+    WHERE substr(entry_date, 1, 7) = ?`, [monthKey])?.totalFee) || 0);
 
   run('BEGIN TRANSACTION');
   try {
@@ -804,7 +842,7 @@ function saveWebDavConfig(payload) {
   setMeta('webdav_directory', directory);
   setMeta('webdav_url', directory);
   setMeta('webdav_username', String(payload?.username || '').trim());
-  setMeta('webdav_password', String(payload?.password || ''));
+  setSecretMeta('webdav_password', String(payload?.password || ''));
   setMeta('webdav_enabled', payload?.enabled ? 'true' : 'false');
   setMeta('webdav_auto_sync_minutes', String(autoSyncMinutes));
   saveDatabase();
@@ -975,3 +1013,4 @@ ipcMain.handle('webdav:pull', async () => pullDatabaseFromWebDav());
 ipcMain.handle('path:open-db-folder', async () => { const folder = path.dirname(getDatabasePath()); await fs.promises.mkdir(folder, { recursive: true }); await shell.openPath(folder); return folder; });
 ipcMain.handle('window:minimize', async () => { mainWindow?.minimize(); });
 ipcMain.handle('window:close', async () => { mainWindow?.hide(); });
+
