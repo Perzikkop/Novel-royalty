@@ -1,6 +1,6 @@
 {
   "name": "book",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Novel royalty recorder desktop app",
   "main": "electron/main.cjs",
   "scripts": {
@@ -38,7 +38,7 @@
     "productName": "小说稿费记录器",
     "afterPack": "scripts/afterPack.cjs",
     "directories": {
-      "output": "dist-electron-105"
+      "output": "dist-electron-106"
     },
     "files": [
       "dist/**/*",

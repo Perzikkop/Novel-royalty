@@ -41,13 +41,15 @@ button, input { font: inherit; }
   background: rgba(255,255,255,0.75);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(14px);
+  -webkit-app-region: drag;
 }
 
 .window-drag {
   display: flex;
   align-items: center;
   gap: 10px;
-  -webkit-app-region: drag;
+  flex: 1;
+  min-width: 0;
 }
 
 .no-drag { -webkit-app-region: no-drag; }
@@ -115,8 +117,10 @@ button, input { font: inherit; }
 .page-shell {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 22px;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -125,6 +129,16 @@ button, input { font: inherit; }
   align-items: center;
   gap: 16px;
   margin-bottom: 18px;
+  flex: 0 0 auto;
+}
+
+.page-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
 }
 
 h1, h2, p { margin: 0; }
@@ -336,15 +350,24 @@ h2 { font-size: 18px; }
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
 }
 
 .settings-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: auto;
+  padding-right: 6px;
 }
 
 .wide-settings { grid-column: 1 / -1; }
-.table-panel { padding: 0; overflow: hidden; }
+.table-panel {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .query-toolbar {
   display: flex;
@@ -353,6 +376,7 @@ h2 { font-size: 18px; }
   gap: 14px;
   padding: 16px;
   border-bottom: 1px solid rgba(94,114,148,0.08);
+  flex: 0 0 auto;
 }
 
 .query-filters {
@@ -403,6 +427,12 @@ select.query-input {
 .data-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+.table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .data-table th,

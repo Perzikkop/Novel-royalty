@@ -472,11 +472,12 @@ onMounted(loadDashboard);
         </nav>
       </header>
 
-      <section v-if="errorMessage" class="banner error">{{ errorMessage }}</section>
-      <section v-if="successMessage" class="banner success">{{ successMessage }}</section>
-      <section v-if="loading" class="panel loading-panel">正在加载...</section>
+      <div class="page-content">
+        <section v-if="errorMessage" class="banner error">{{ errorMessage }}</section>
+        <section v-if="successMessage" class="banner success">{{ successMessage }}</section>
+        <section v-if="loading" class="panel loading-panel">正在加载...</section>
 
-      <template v-else>
+        <template v-else>
         <section v-if="mainTab === 'entry'" class="entry-layout compact-layout">
           <div class="entry-main-stack">
             <nav class="sub-tabs">
@@ -667,24 +668,26 @@ onMounted(loadDashboard);
               </div>
               <div class="query-total">合计 {{ formatCurrency(dayTotal) }}</div>
             </div>
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>日期</th>
-                  <th>金额</th>
-                  <th>书数</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="day in filteredDayRows" :key="day.entryDate">
-                  <td>{{ day.entryDate }}</td>
-                  <td>{{ formatCurrency(day.total) }}</td>
-                  <td>{{ day.bookCount }}</td>
-                  <td><button class="ghost small" @click="editDay(day.entryDate)">编辑</button></td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>金额</th>
+                    <th>书数</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="day in filteredDayRows" :key="day.entryDate">
+                    <td>{{ day.entryDate }}</td>
+                    <td>{{ formatCurrency(day.total) }}</td>
+                    <td>{{ day.bookCount }}</td>
+                    <td><button class="ghost small" @click="editDay(day.entryDate)">编辑</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </article>
 
           <article v-else-if="queryTab === 'month'" class="panel table-panel">
@@ -712,7 +715,8 @@ onMounted(loadDashboard);
                 <span>税额 {{ formatCurrency(monthRangeTotals.tax) }}</span>
               </div>
             </div>
-            <div class="grouped-summary-list">
+            <div class="table-scroll">
+              <div class="grouped-summary-list">
               <section v-for="month in filteredMonthRows" :key="month.monthKey" class="group-card">
                 <div class="group-card-header">
                   <div>
@@ -761,6 +765,7 @@ onMounted(loadDashboard);
                   </tbody>
                 </table>
               </section>
+              </div>
             </div>
           </article>
 
@@ -791,7 +796,8 @@ onMounted(loadDashboard);
                 <span>实际总收入 {{ formatCurrency(yearRangeTotals.actualIncome) }}</span>
               </div>
             </div>
-            <div class="grouped-summary-list">
+            <div class="table-scroll">
+              <div class="grouped-summary-list">
               <section v-for="year in filteredYearRows" :key="year.yearKey" class="group-card">
                 <div class="group-card-header">
                   <div>
@@ -841,6 +847,7 @@ onMounted(loadDashboard);
                   </tbody>
                 </table>
               </section>
+              </div>
             </div>
           </article>
         </section>
@@ -914,7 +921,8 @@ onMounted(loadDashboard);
             </div>
           </article>
         </section>
-      </template>
+        </template>
+      </div>
     </div>
   </div>
 </template>
