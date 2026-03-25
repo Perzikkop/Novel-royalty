@@ -29,6 +29,7 @@ const MIGRATION_VERSION = 2;
 let webdavAutoSyncTimer = null;
 let webdavDirty = false;
 let isQuitting = false;
+let isPerformingQuitSync = false;
 
 function getAssetPath(name) {
   return path.join(__dirname, 'assets', name);
@@ -53,6 +54,10 @@ function getRendererUrl() {
 
 function getDatabasePath() {
   return path.join(app.getPath('userData'), WEB_DAV_FILE_NAME);
+}
+
+function getDatabaseBackupDir() {
+  return path.join(app.getPath('userData'), 'backups');
 }
 
 function getDefaultImportPath() {
@@ -612,28 +617,45 @@ async function webdavRequest(method, body) {
   const headers = { Authorization: `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}` };
   if (body) headers['Content-Type'] = 'application/octet-stream';
   const response = await fetch(fileUrl, { method, headers, body });
-  if (!response.ok) throw new Error(`WebDAV ${method} 失败：${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    const error = new Error(`WebDAV ${method} 失败：${response.status} ${response.statusText}`);
+    error.status = response.status;
+    throw error;
+  }
   return response;
+}
+
+function createLocalDatabaseBackup(prefix = 'webdav-pull') {
+  const sourcePath = getDatabasePath();
+  if (!fs.existsSync(sourcePath)) return '';
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupDir = getDatabaseBackupDir();
+  fs.mkdirSync(backupDir, { recursive: true });
+  const backupPath = path.join(backupDir, `${prefix}-${stamp}.sqlite`);
+  fs.copyFileSync(sourcePath, backupPath);
+  return backupPath;
+}
+
+function setWebDavSyncState(status, message) {
+  setMeta('webdav_last_sync_at', new Date().toISOString());
+  setMeta('webdav_last_sync_status', status);
+  setMeta('webdav_last_sync_message', message);
+  saveDatabase();
 }
 
 async function pushDatabaseToWebDav() {
   saveDatabase();
   await webdavRequest('PUT', Buffer.from(db.export()));
-  setMeta('webdav_last_sync_at', new Date().toISOString());
-  setMeta('webdav_last_sync_status', 'success');
-  setMeta('webdav_last_sync_message', '已上传到 WebDAV');
+  setWebDavSyncState('success', '已上传到 WebDAV');
   webdavDirty = false;
-  saveDatabase();
   return getWebDavConfig();
 }
 
 async function pullDatabaseFromWebDav() {
+  createLocalDatabaseBackup();
   const response = await webdavRequest('GET');
   resetDatabaseFromBytes(new Uint8Array(await response.arrayBuffer()));
-  setMeta('webdav_last_sync_at', new Date().toISOString());
-  setMeta('webdav_last_sync_status', 'success');
-  setMeta('webdav_last_sync_message', '已从 WebDAV 下载并覆盖本地');
-  saveDatabase();
+  setWebDavSyncState('success', '已从 WebDAV 下载并覆盖本地');
   return getDashboardData();
 }
 
@@ -643,16 +665,17 @@ async function safeAutoPush() {
   webdavDirty = true;
 }
 
-async function flushAutoSyncIfNeeded() {
+function setWebDavSyncError(error, fallbackMessage = '同步失败') {
+  setWebDavSyncState('error', error?.message || fallbackMessage);
+}
+
+async function flushAutoSyncIfNeeded(force = false) {
   const config = getWebDavConfig();
-  if (!config.enabled || !config.directory || !webdavDirty) return;
+  if (!config.enabled || !config.directory || (!force && !webdavDirty)) return;
   try {
     await pushDatabaseToWebDav();
   } catch (error) {
-    setMeta('webdav_last_sync_at', new Date().toISOString());
-    setMeta('webdav_last_sync_status', 'error');
-    setMeta('webdav_last_sync_message', error.message || '同步失败');
-    saveDatabase();
+    setWebDavSyncError(error, '同步失败');
   }
 }
 
@@ -667,6 +690,48 @@ function refreshWebDavAutoSyncTimer() {
   webdavAutoSyncTimer = setInterval(() => {
     flushAutoSyncIfNeeded().catch(() => {});
   }, intervalMs);
+}
+
+async function pullWebDavOnLaunchIfEnabled() {
+  const config = getWebDavConfig();
+  if (!config.enabled || !config.directory) return;
+  try {
+    await pullDatabaseFromWebDav();
+  } catch (error) {
+    if (Number(error?.status || 0) === 404) {
+      setWebDavSyncState('success', 'WebDAV 远端数据库不存在，已跳过启动拉取');
+      return;
+    }
+    setWebDavSyncError(error, '启动时获取 WebDAV 失败');
+  }
+}
+
+async function syncWebDavOnExitIfEnabled() {
+  const config = getWebDavConfig();
+  if (!config.enabled || !config.directory) return;
+  try {
+    await flushAutoSyncIfNeeded(true);
+  } catch (error) {
+    setWebDavSyncError(error, '退出时上传 WebDAV 失败');
+  }
+}
+
+async function performQuit() {
+  if (isPerformingQuitSync) return;
+  isPerformingQuitSync = true;
+  isQuitting = true;
+  try {
+    await syncWebDavOnExitIfEnabled();
+  } finally {
+    if (webdavAutoSyncTimer) {
+      clearInterval(webdavAutoSyncTimer);
+      webdavAutoSyncTimer = null;
+    }
+    tray?.destroy();
+    tray = null;
+    mainWindow?.destroy();
+    app.quit();
+  }
 }
 
 function getDashboardData() {
@@ -853,10 +918,7 @@ function saveWebDavConfig(payload) {
 async function testWebDavConfig(payload) {
   saveWebDavConfig(payload);
   await webdavRequest('GET');
-  setMeta('webdav_last_sync_status', 'success');
-  setMeta('webdav_last_sync_message', '连接成功');
-  setMeta('webdav_last_sync_at', new Date().toISOString());
-  saveDatabase();
+  setWebDavSyncState('success', '连接成功');
   return getWebDavConfig();
 }
 
@@ -924,13 +986,7 @@ function ensureTray() {
     { type: 'separator' },
     {
       label: '退出',
-      click: () => {
-        isQuitting = true;
-        tray?.destroy();
-        tray = null;
-        mainWindow?.destroy();
-        app.quit();
-      },
+      click: async () => { await performQuit(); },
     },
   ]));
   tray.on('double-click', () => showMainWindow());
@@ -946,6 +1002,7 @@ async function initialize() {
   cleanupDatabase();
   ensureTray();
   refreshWebDavAutoSyncTimer();
+  await pullWebDavOnLaunchIfEnabled();
   const defaultImportPath = getDefaultImportPath();
   if (fs.existsSync(defaultImportPath) && !getMeta('last_import_at', '')) importWorkbook(defaultImportPath);
 }
@@ -961,8 +1018,13 @@ app.whenReady().then(async () => {
     }
   });
 });
-app.on('before-quit', () => {
-  isQuitting = true;
+app.on('before-quit', (event) => {
+  if (isPerformingQuitSync || !mainWindow) {
+    isQuitting = true;
+    return;
+  }
+  event.preventDefault();
+  performQuit().catch(() => {});
 });
 app.on('window-all-closed', (event) => {
   if (!isQuitting) {

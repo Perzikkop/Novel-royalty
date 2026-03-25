@@ -42,106 +42,111 @@
         </div>
       </article>
 
-      <article v-else class="month-list">
-        <div class="panel month-toolbar">
-          <div class="month-year-tabs">
-            <button
-              v-for="year in monthYears"
-              :key="year"
-              :class="['year-chip', { active: entryYear === year }]"
-              @click="$emit('update:entryYear', year)"
-            >
-              {{ year }}
-            </button>
-          </div>
-          <div class="month-chip-row">
-            <button
-              v-for="month in visibleEntryMonths"
-              :key="month.monthKey"
-              :class="['month-chip', { active: entryMonthKey === month.monthKey }]"
-              @click="$emit('update:entryMonthKey', month.monthKey)"
-            >
-              {{ month.monthLabel }}
-            </button>
+      <article v-else class="panel table-panel month-list-shell">
+        <div class="query-toolbar month-entry-toolbar">
+          <div class="month-toolbar">
+            <div class="month-year-tabs">
+              <button
+                v-for="year in monthYears"
+                :key="year"
+                :class="['year-chip', { active: entryYear === year }]"
+                @click="$emit('update:entryYear', year)"
+              >
+                {{ year }}
+              </button>
+            </div>
+            <div class="month-chip-row">
+              <button
+                v-for="month in visibleEntryMonths"
+                :key="month.monthKey"
+                :class="['month-chip', { active: entryMonthKey === month.monthKey }]"
+                @click="$emit('update:entryMonthKey', month.monthKey)"
+              >
+                {{ month.monthLabel }}
+              </button>
+            </div>
           </div>
         </div>
+        <div class="table-scroll month-list-scroll">
+          <div class="month-list">
+          <div v-if="currentEntryMonth" class="group-card month-panel current-month-panel">
+            <div class="month-top">
+              <div>
+                <h2>{{ currentEntryMonth.monthLabel }}</h2>
+                <div class="month-key">{{ currentEntryMonth.monthKey }}</div>
+              </div>
+              <div class="month-fee">{{ formatCurrency(currentMonthTotals.totalFee) }}</div>
+            </div>
+            <div class="month-summary-strip">
+              <div class="summary-chip">
+                <span>税前合计</span>
+                <strong>{{ formatCurrency(currentMonthTotals.totalFee) }}</strong>
+              </div>
+              <div class="summary-chip">
+                <span>实际合计</span>
+                <strong>{{ formatCurrency(currentMonthTotals.actualTotal) }}</strong>
+              </div>
+              <div class="summary-chip">
+                <span>税后合计</span>
+                <strong>{{ formatCurrency(currentMonthTotals.afterTaxTotal) }}</strong>
+              </div>
+              <div class="summary-chip">
+                <span>税额合计</span>
+                <strong>{{ formatCurrency(currentMonthTotals.tax) }}</strong>
+              </div>
+            </div>
+            <div class="month-book-table">
+              <div class="month-book-head month-book-row">
+                <span>书籍</span>
+                <span>税前稿费</span>
+                <span>实际稿费</span>
+                <span>税后稿费</span>
+                <span>税额</span>
+              </div>
+              <div v-for="book in currentMonthBooks" :key="`${currentEntryMonth.monthKey}-${book.bookId}`" class="month-book-row">
+                <strong>{{ book.bookName }}</strong>
+                <span>{{ formatCurrency(book.totalFee) }}</span>
+                <input v-model="monthlyDrafts[currentEntryMonth.monthKey][book.bookId].actualTotal" type="number" min="0" step="0.01" placeholder="0.00" />
+                <input v-model="monthlyDrafts[currentEntryMonth.monthKey][book.bookId].afterTaxTotal" type="number" min="0" step="0.01" placeholder="0.00" />
+                <span class="tax-inline">{{ formatCurrency(book.tax) }}</span>
+              </div>
+              <div class="month-book-row total-row">
+                <strong>合计</strong>
+                <strong>{{ formatCurrency(currentMonthTotals.totalFee) }}</strong>
+                <strong>{{ formatCurrency(currentMonthTotals.actualTotal) }}</strong>
+                <strong>{{ formatCurrency(currentMonthTotals.afterTaxTotal) }}</strong>
+                <strong>{{ formatCurrency(currentMonthTotals.tax) }}</strong>
+              </div>
+            </div>
+            <div class="month-action-row">
+              <button class="primary save-month-btn" :disabled="busy" @click="saveMonth(currentEntryMonth.monthKey)">保存本月</button>
+            </div>
+          </div>
 
-        <div v-if="currentEntryMonth" class="panel month-panel current-month-panel">
-          <div class="month-top">
-            <div>
-              <h2>{{ currentEntryMonth.monthLabel }}</h2>
-              <div class="month-key">{{ currentEntryMonth.monthKey }}</div>
+          <div class="group-card year-refund-panel">
+            <div class="month-top">
+              <div>
+                <h2>{{ entryYear }}年退税</h2>
+                <div class="month-key">年度实际总收入 = 税后总收入 + 退税金额</div>
+              </div>
+              <div class="month-fee">{{ formatCurrency(state.yearSummary.find((item) => item.yearKey === entryYear)?.actualIncome || 0) }}</div>
             </div>
-            <div class="month-fee">{{ formatCurrency(currentMonthTotals.totalFee) }}</div>
-          </div>
-          <div class="month-summary-strip">
-            <div class="summary-chip">
-              <span>税前合计</span>
-              <strong>{{ formatCurrency(currentMonthTotals.totalFee) }}</strong>
-            </div>
-            <div class="summary-chip">
-              <span>实际合计</span>
-              <strong>{{ formatCurrency(currentMonthTotals.actualTotal) }}</strong>
-            </div>
-            <div class="summary-chip">
-              <span>税后合计</span>
-              <strong>{{ formatCurrency(currentMonthTotals.afterTaxTotal) }}</strong>
-            </div>
-            <div class="summary-chip">
-              <span>税额合计</span>
-              <strong>{{ formatCurrency(currentMonthTotals.tax) }}</strong>
+            <div class="year-refund-row">
+              <label class="field">
+                <span>退税金额</span>
+                <input v-model="yearlyDrafts[entryYear]" type="number" min="0" step="0.01" placeholder="0.00" />
+              </label>
+              <div class="summary-chip compact-chip">
+                <span>税后总收入</span>
+                <strong>{{ formatCurrency(state.yearSummary.find((item) => item.yearKey === entryYear)?.afterTaxTotal || 0) }}</strong>
+              </div>
+              <div class="summary-chip compact-chip">
+                <span>年度实际总收入</span>
+                <strong>{{ formatCurrency((Number(state.yearSummary.find((item) => item.yearKey === entryYear)?.afterTaxTotal || 0) + Number(yearlyDrafts[entryYear] || 0)).toFixed(2)) }}</strong>
+              </div>
+              <button class="primary save-month-btn" :disabled="busy" @click="saveYear(entryYear)">保存年度</button>
             </div>
           </div>
-          <div class="month-book-table">
-            <div class="month-book-head month-book-row">
-              <span>书籍</span>
-              <span>税前稿费</span>
-              <span>实际稿费</span>
-              <span>税后稿费</span>
-              <span>税额</span>
-            </div>
-            <div v-for="book in currentMonthBooks" :key="`${currentEntryMonth.monthKey}-${book.bookId}`" class="month-book-row">
-              <strong>{{ book.bookName }}</strong>
-              <span>{{ formatCurrency(book.totalFee) }}</span>
-              <input v-model="monthlyDrafts[currentEntryMonth.monthKey][book.bookId].actualTotal" type="number" min="0" step="0.01" placeholder="0.00" />
-              <input v-model="monthlyDrafts[currentEntryMonth.monthKey][book.bookId].afterTaxTotal" type="number" min="0" step="0.01" placeholder="0.00" />
-              <span class="tax-inline">{{ formatCurrency(book.tax) }}</span>
-            </div>
-            <div class="month-book-row total-row">
-              <strong>合计</strong>
-              <strong>{{ formatCurrency(currentMonthTotals.totalFee) }}</strong>
-              <strong>{{ formatCurrency(currentMonthTotals.actualTotal) }}</strong>
-              <strong>{{ formatCurrency(currentMonthTotals.afterTaxTotal) }}</strong>
-              <strong>{{ formatCurrency(currentMonthTotals.tax) }}</strong>
-            </div>
-          </div>
-          <div class="month-action-row">
-            <button class="primary save-month-btn" :disabled="busy" @click="saveMonth(currentEntryMonth.monthKey)">保存本月</button>
-          </div>
-        </div>
-
-        <div class="panel year-refund-panel">
-          <div class="month-top">
-            <div>
-              <h2>{{ entryYear }}年退税</h2>
-              <div class="month-key">年度实际总收入 = 税后总收入 + 退税金额</div>
-            </div>
-            <div class="month-fee">{{ formatCurrency(state.yearSummary.find((item) => item.yearKey === entryYear)?.actualIncome || 0) }}</div>
-          </div>
-          <div class="year-refund-row">
-            <label class="field">
-              <span>退税金额</span>
-              <input v-model="yearlyDrafts[entryYear]" type="number" min="0" step="0.01" placeholder="0.00" />
-            </label>
-            <div class="summary-chip compact-chip">
-              <span>税后总收入</span>
-              <strong>{{ formatCurrency(state.yearSummary.find((item) => item.yearKey === entryYear)?.afterTaxTotal || 0) }}</strong>
-            </div>
-            <div class="summary-chip compact-chip">
-              <span>年度实际总收入</span>
-              <strong>{{ formatCurrency((Number(state.yearSummary.find((item) => item.yearKey === entryYear)?.afterTaxTotal || 0) + Number(yearlyDrafts[entryYear] || 0)).toFixed(2)) }}</strong>
-            </div>
-            <button class="primary save-month-btn" :disabled="busy" @click="saveYear(entryYear)">保存年度</button>
           </div>
         </div>
       </article>

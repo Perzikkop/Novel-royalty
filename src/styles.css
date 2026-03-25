@@ -196,12 +196,14 @@ h2 { font-size: 18px; }
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) 320px;
   gap: 18px;
+  min-height: 0;
 }
 
 .entry-main-stack {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
 }
 
 .month-toolbar {
@@ -347,18 +349,22 @@ h2 { font-size: 18px; }
 }
 
 .query-layout,
-.settings-layout {
+.settings-layout-shell {
   display: flex;
   flex-direction: column;
   gap: 18px;
   min-height: 0;
 }
 
-.settings-layout {
+.settings-layout-shell {
+  min-height: 0;
+}
+
+.settings-stack {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  overflow: auto;
-  padding-right: 6px;
+  gap: 18px;
+  padding: 16px;
 }
 
 .wide-settings { grid-column: 1 / -1; }
@@ -449,14 +455,50 @@ select.query-input {
   background: rgba(248,250,252,0.9);
 }
 
+.month-list-shell,
+.settings-table-panel {
+  min-height: 0;
+}
+
+.month-list-scroll,
+.settings-scroll {
+  scrollbar-gutter: stable;
+}
+
 .month-list {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 14px;
+  padding: 16px;
+  min-width: 0;
+}
+
+.settings-toolbar,
+.month-entry-toolbar {
+  align-items: center;
+}
+
+.settings-stack {
+  min-width: 0;
+}
+
+.settings-stack > *,
+.month-list > * {
+  min-width: 0;
+  width: 100%;
+}
+
+.settings-card,
+.month-panel,
+.year-refund-panel {
+  background: rgba(255,255,255,0.84);
+  box-shadow: none;
+  padding: 20px;
 }
 
 .current-month-panel {
-  max-width: 1080px;
+  max-width: none;
 }
 
 .month-top,
@@ -547,7 +589,7 @@ select.query-input {
 }
 
 .year-refund-panel {
-  max-width: 1080px;
+  max-width: none;
 }
 
 .year-refund-row {
